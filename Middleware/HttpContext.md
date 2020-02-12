@@ -1,0 +1,7 @@
+## The HttpContext object
+
+HttpContext sits behind the scenes. The ASP.NET Core web server constructs an HttpContext, which the ASP.NET Core application uses as a sort of "storage box" for a single request. Anything which is specific to this request and the subsequent response can be associated with and stored in it. This could include properties of the request, request-specific services, data which has been loaded, or errors which have occurred. The web server fills the initial HttpContext with details of the original HTTP request and other configuration details, and passes it on to the rest of the application.
+
+All middleware has access to the HttpContext for a request. It can use this to determine, for example, if the request contained any user credentials, what page the request was attempting to access, and to fetch any posted data. It can then use these details to determine how to handle the request.
+
+Once the application has finished processing the request, it'll update the HttpContext with an appropriate response and return it back through the middleware pipeline to the web server. The ASP.NET Core web server converts the representation into a raw HTTP response and sends it back to the reverse proxy, which will forward it to the user's browser.
