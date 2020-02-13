@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace SimpleRunExtension
+namespace StatusCodePagesMiddleware
 {
     public class Startup
     {
@@ -26,24 +26,20 @@ namespace SimpleRunExtension
                 app.UseDeveloperExceptionPage();
             }
 
-            // Uses the Run extension to create a simple middleware that always returns a response
-            app.Run(async (context) => {
-                context.Response.ContentType = "text/plain";
-                await context.Response.WriteAsync(DateTime.UtcNow.ToString());
-            });
+            app.UseStatusCodePagesWithRedirects("/error?status={0}");
 
-            // NOTE: Any middleware added after the Run extension will never execute
-
-            app.UseRouting();
-
-            app.UseEndpoints(endpoints =>
+            app.Map("/error", errorApp =>
             {
-                endpoints.MapGet("/", async context =>
-                {
-                    await context.Response.WriteAsync("Simple Middleware using the Run extension");
+                errorApp.Run(async context => {
+                    await context.Response.WriteAsync($"This is a redirected error message status {context.Request.Query["status"]}");            
                 });
-            });
+            });      
 
+            app.Run(context => 
+            {
+                context.Response.StatusCode = 500;//change this as necessary
+                return Task.CompletedTask;
+            });
         }
     }
 }

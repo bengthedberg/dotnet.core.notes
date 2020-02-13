@@ -1,15 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace SimpleRunExtension
+namespace DisableCache
 {
+
     public class Startup
     {
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -26,13 +23,8 @@ namespace SimpleRunExtension
                 app.UseDeveloperExceptionPage();
             }
 
-            // Uses the Run extension to create a simple middleware that always returns a response
-            app.Run(async (context) => {
-                context.Response.ContentType = "text/plain";
-                await context.Response.WriteAsync(DateTime.UtcNow.ToString());
-            });
-
-            // NOTE: Any middleware added after the Run extension will never execute
+            // app.UseMiddleware<HeadersMiddleware>();
+            app.UseDisabledCacheHeaders();
 
             app.UseRouting();
 
@@ -40,10 +32,9 @@ namespace SimpleRunExtension
             {
                 endpoints.MapGet("/", async context =>
                 {
-                    await context.Response.WriteAsync("Simple Middleware using the Run extension");
+                    await context.Response.WriteAsync("No Cache");
                 });
             });
-
         }
     }
 }

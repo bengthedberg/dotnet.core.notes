@@ -241,7 +241,215 @@ static file middleware, the error-handling middleware, or the MVC middleware.
 
 **Creating simple endpoints with the Run extension**
 
+The following listing shows how you could build a simple middleware that returns
+the current time. It uses the provided HttpContext context object and the Response
+property to set the content-type of the response and writes the body of the response
+using WriteAsync(text).
 
+```csharp
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    // Uses the Run extension to create a simple middleware that always returns a response
+    app.Run(async (context) => {
+        context.Response.ContentType = "text/plain";
+        await context.Response.WriteAsync(DateTime.UtcNow.ToString());
+    });
 
-### How to create branches in your middleware pipeline
+    // NOTE: Any middleware added after the Run extension will never execute
+}
+```
 
+The Run extension is useful for building simple middleware. You can use it to create
+basic endpoints that always generate a response. But as the component always generates
+some sort of response, you must always place it at the end of the pipeline, as no
+middleware placed after it will execute.
+
+A more common scenario is where you want your middleware component to only
+respond to a specific URL path. In the next section, you’ll see how you can combine
+Run with the Map extension method to create branching middleware pipelines.
+
+**Branch your middleware pipeline with Map extension**
+
+The Map extension method lets you change that simple pipeline into a branching
+structure. Each branch of the pipeline is independent; a request passes through one
+branch or the other, but not both.
+
+In this scenario we will create a branch using the `Map` extension method
+and to place the time middleware on that branch, as shown next. Only those
+requests that match the Map pattern `/time` will execute the branch, all other requests
+will be handled by the MVC middleware on the main trunk instead.
+
+```csharp
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    app.Map("/time", branch =>
+    {
+        branch.UseExceptionHandler("/Error");
+
+        // Uses the Run extension to create a simple middleware that always returns a response
+        branch.Run(async (context) =>
+        {
+            context.Response.ContentType = "text/plain";
+            await context.Response.WriteAsync(DateTime.UtcNow.ToString());
+        });
+    });
+}
+```
+
+The Map middleware creates a completely new `IApplicationBuilder` (called `branch`
+in the listing), which you can customize as you would your main app pipeline. Middleware
+added to the branch builder are only added to the branch pipeline, not the main
+trunk pipeline.
+
+> The Map extension can be useful, but if you try to get too elaborate, it can quickly
+> get confusing. Remember, you should use middleware for implementing cross-cutting concerns or simple endpoints. 
+> MvcMiddleware is better suited to more complex routing
+> requirements, so don’t be afraid to use it.
+
+**Adding to the pipeline with the Use extension**
+
+You can use the Use extension method to add a general-purpose piece of middleware.
+You can use it to view and modify requests as they arrive, to generate a response, or to
+pass the request on to subsequent middleware in the pipeline.
+
+Similar to the Run extension, when you add the Use extension to your pipeline, you
+specify a lambda function that runs when a request reaches the middleware. The app
+passes two parameters to this function:
+* The HttpContext representing the current request and response. You can use this
+to inspect the request or generate a response, as you saw with the Run extension.
+* A pointer to the rest of the pipeline as a Func<Task>. By executing this task, you
+can execute the rest of the middleware pipeline.
+
+By providing a pointer to the rest of the pipeline, you can use the Use extension to
+control exactly how and when the rest of the pipeline executes. If you don’t call the provided Func<Task> at all, then the rest of the pipeline
+doesn’t execute for the request, so you have complete control.
+
+```csharp
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    // The Use extension takes a lambda with HttpContext (context) and Func<Task> (next) parameters.
+    app.Use(async (context, next) =>
+    {
+        // The StartsWithSegments method looks for the provided segment in the current path.
+        if (context.Request.Path.StartsWithSegments("/time"))
+        {
+            // If the path matches, generate a response, and short-circuit the pipeline
+            context.Response.ContentType = "text/plain";
+            await context.Response.WriteAsync(DateTime.UtcNow.ToString());
+        }
+        else
+        {
+            // If the path doesn’t match, call the next middleware in the pipeline.
+            await next();
+        }
+    });
+}
+```
+
+With the `Use` extension, you have control over when, and if, you call the rest of the
+middleware pipeline. But it’s important to note that you generally shouldn’t modify
+the Response object after calling `next()`. 
+
+Calling `next()` runs the rest of the middleware
+pipeline, so a subsequent middleware may have already started sending the
+response to the browser. If you try to modify the response after executing the pipeline,
+you may end up corrupting the response or sending invalid data.
+
+> WARNING Don’t modify the Response object after calling `next()`. Also, don’t
+call `next()` if you’ve written to the response body with `WriteAsync()`, as the
+response may have already started sending and you could cause invalid data
+to be sent.
+
+### Encapsulating Your Middleware
+
+By encapsulating your middleware into custom classes, you can easily test
+their behavior, or distribute them in NuGet packages, so I strongly recommend taking
+this approach. Apart from anything else, it will make your `Startup.Configure()`
+method less cluttered and easier to understand.
+
+Custom middleware components don’t derive from a particular base class, but they
+have a certain shape. In particular, middleware classes should
+have a constructor that takes a `RequestDelegate` object, which represents the rest of
+the middleware pipeline, and they should have an `Invoke` function with a signature
+similar to
+
+```csharp 
+public Task Invoke(HttpContext context);
+```
+
+The `Invoke()` function is equivalent to the lambda function from the Use extension,
+and is called when a request is received.
+
+```csharp
+public class HeadersMiddleware
+{
+    private readonly RequestDelegate _next;
+    public HeadersMiddleware(RequestDelegate next)
+    {
+        _next = next;
+    }
+    public async Task Invoke(HttpContext context)
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers["Strict-Transport-Security"] =
+            "max-age=60";
+            return Task.CompletedTask;
+        });
+        await _next(context);
+    }
+}
+```
+
+**Helper Extension**
+
+A common pattern is to create helper extension methods to make it easy to consume
+your extension method from Startup.Configure (IntelliSense reveals it as an option
+on the IApplicationBuilder instance). Here’s how you could create a simple extension
+method for HeadersMiddleware.
+
+```csharp
+    public static class MiddlewareExtensions
+    {
+        public static IApplicationBuilder UseDisabledCacheHeaders(
+        this IApplicationBuilder app)
+        {
+            return app.UseMiddleware<HeadersMiddleware>();
+        }
+    }
+```
+
+With this extension method, you can now add the headers middleware to your app
+using :
+
+```csharp
+    app.UseDisabledCacheHeaders();
+```
+
+### Use services in the pipeline
+
+In some cases, you may need to use DI to inject services and use them to handle arequest. You can inject singleton services into the constructor of your middleware
+component, or you can inject services with any lifetime into the Invoke method of
+your middleware, as demonstrated in the following listing
+
+```csharp
+public class ExampleMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ServiceA _a;
+
+    // You can inject additional services in the constructor. These must be singletons.
+    public HeadersMiddleware(RequestDelegate next, ServiceA a)
+    {
+        _next = next;
+        _a = a;
+    }
+
+    // You can inject services into the Invoke method. These may have any lifetime
+    public async Task Invoke(HttpContext context, Service b, service c)
+    {
+        // use services a, b, and c
+        // and/or call _next.Invoke(context);
+    }
+}
+```

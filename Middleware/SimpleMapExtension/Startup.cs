@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace SimpleRunExtension
+namespace SimpleMapExtension
 {
     public class Startup
     {
@@ -26,13 +26,17 @@ namespace SimpleRunExtension
                 app.UseDeveloperExceptionPage();
             }
 
-            // Uses the Run extension to create a simple middleware that always returns a response
-            app.Run(async (context) => {
-                context.Response.ContentType = "text/plain";
-                await context.Response.WriteAsync(DateTime.UtcNow.ToString());
-            });
+            app.Map("/time", branch =>
+            {
+                branch.UseExceptionHandler("/Error");
 
-            // NOTE: Any middleware added after the Run extension will never execute
+                // Uses the run extension to create a simple middleware that always returns a response
+                branch.Run(async (context) =>
+                {
+                    context.Response.ContentType = "text/plain";
+                    await context.Response.WriteAsync(DateTime.UtcNow.ToString());
+                });
+            });
 
             app.UseRouting();
 
@@ -40,10 +44,9 @@ namespace SimpleRunExtension
             {
                 endpoints.MapGet("/", async context =>
                 {
-                    await context.Response.WriteAsync("Simple Middleware using the Run extension");
+                    await context.Response.WriteAsync("Simple Middleware using the Map Extension");
                 });
             });
-
         }
     }
 }

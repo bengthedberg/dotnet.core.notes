@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace SimpleRunExtension
+namespace DeveloperExceptionPage
 {
     public class Startup
     {
@@ -26,24 +26,15 @@ namespace SimpleRunExtension
                 app.UseDeveloperExceptionPage();
             }
 
-            // Uses the Run extension to create a simple middleware that always returns a response
-            app.Run(async (context) => {
-                context.Response.ContentType = "text/plain";
-                await context.Response.WriteAsync(DateTime.UtcNow.ToString());
-            });
-
-            // NOTE: Any middleware added after the Run extension will never execute
-
             app.UseRouting();
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapGet("/", async context =>
+                endpoints.MapGet("/", context =>
                 {
-                    await context.Response.WriteAsync("Simple Middleware using the Run extension");
+                    throw new ApplicationException("Diagnostic Developer Exception Page");
                 });
             });
-
         }
     }
 }
