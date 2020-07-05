@@ -1,7 +1,10 @@
 # .NET Core 
 
 * [AWS](./AWS/README.md)
+* [Configuration](./Configuration/README.md)
+* [Diagnostics](./Diagnostics/README.md)
 * [Documentation](./Documentation/README.md)
+* [Middleware](./Middleware/README.md)
 * [Logging](./Logging/README.md)
 
 
@@ -166,4 +169,3 @@ application.json configuration
 }
 ```
 
-### 
